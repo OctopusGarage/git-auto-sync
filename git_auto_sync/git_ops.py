@@ -70,8 +70,21 @@ def add_paths(repo: str | Path, paths: list[str]) -> None:
         _git(repo, "add", "--", *paths)
 
 
+def _is_gpg_sign_error(err: str) -> bool:
+    low = err.lower()
+    return "gpg failed to sign" in low or "cannot run gpg" in low or (
+        "gpg" in low and "sign" in low
+    )
+
+
 def commit(repo: str | Path, message: str) -> tuple[bool, str]:
-    return _git_ok(repo, "commit", "-m", message)
+    ok, err = _git_ok(repo, "commit", "-m", message)
+    if ok or not _is_gpg_sign_error(err):
+        return ok, err
+    # Signing can fail in headless/background runs (gpg not on PATH, pinentry
+    # unavailable, or the gpg-agent cache cleared after a reboot). Fall back to
+    # an unsigned commit so the sync still goes through.
+    return _git_ok(repo, "commit", "--no-gpg-sign", "-m", message)
 
 
 def pull_rebase(repo: str | Path) -> tuple[bool, str]:

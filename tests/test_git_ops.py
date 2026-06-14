@@ -32,6 +32,19 @@ def test_commit_paths_and_push(git_repo):
     assert ok is True, err
 
 
+def test_commit_falls_back_to_unsigned_when_signing_fails(git_repo):
+    import subprocess
+    # Force signing on but point gpg at a missing binary so signing fails the
+    # same way it does in a headless run (gpg not found / cannot sign).
+    subprocess.run(["git", "config", "commit.gpgsign", "true"], cwd=git_repo, check=True)
+    subprocess.run(["git", "config", "gpg.program", "/nonexistent/gpg"], cwd=git_repo, check=True)
+    (Path(git_repo) / "new.txt").write_text("hi\n")
+    git_ops.add_paths(git_repo, ["new.txt"])
+    ok, err = git_ops.commit(git_repo, "feat: add new")
+    assert ok is True, err
+    assert git_ops.has_changes(git_repo) is False
+
+
 def test_pull_rebase_conflict_aborts_clean(git_repo, tmp_path):
     # Create a divergent commit on the remote via a second clone.
     import subprocess
