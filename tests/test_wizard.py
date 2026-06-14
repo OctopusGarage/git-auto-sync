@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 from git_auto_sync.config import load_config
-from git_auto_sync.wizard import render_config_toml, scan_git_repos
+from git_auto_sync.wizard import _resolve_repo_token, render_config_toml, scan_git_repos
 
 # ---------------------------------------------------------------------------
 # scan_git_repos
@@ -252,3 +252,66 @@ def test_init_accepts_manual_repo_paths_when_scan_finds_none(tmp_path, monkeypat
 
     cfg = load_config(cfg_path)
     assert [repo.path for repo in cfg.repos] == [str(manual_repo.resolve())]
+
+
+def test_init_accepts_tilde_path_when_scan_finds_none(tmp_path, monkeypatch):
+    """Tilde-prefixed repo path is accepted as explicit path input."""
+    manual_repo = tmp_path / "manual"
+    manual_repo.mkdir()
+
+    import builtins
+    import os
+
+    import git_auto_sync.wizard as wizard_mod
+    monkeypatch.setattr(wizard_mod, "scan_git_repos", lambda parent: [])
+    monkeypatch.setattr(wizard_mod.shutil, "which", lambda name: None)
+
+    original_home = os.environ.get("HOME", "")
+    original_user_profile = os.environ.get("USERPROFILE", "")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    answers = iter([
+        str(tmp_path),
+        "~/manual",
+        "",
+        "rules",
+        "",
+        "",
+        "n",
+        "n",
+    ])
+    monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
+
+    cfg_path = tmp_path / "config_tilde.toml"
+    from git_auto_sync.cli import main
+    rc = main(["init", "--no-schedule", "--config", str(cfg_path)])
+    assert rc == 0
+
+    cfg = load_config(cfg_path)
+    assert [repo.path for repo in cfg.repos] == [str(manual_repo.resolve())]
+
+    if original_home:
+        monkeypatch.setenv("HOME", original_home)
+    else:
+        monkeypatch.delenv("HOME", raising=False)
+    if original_user_profile:
+        monkeypatch.setenv("USERPROFILE", original_user_profile)
+    else:
+        monkeypatch.delenv("USERPROFILE", raising=False)
+
+
+def test_resolve_repo_token_tilde_path_uses_explicit_lookup(tmp_path, monkeypatch):
+    """A user-entered tilde path should never be treated as repository-name matching."""
+    manual_repo = tmp_path / "entropy-nexus"
+    manual_repo.mkdir()
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    selected = _resolve_repo_token(
+        "~/entropy-nexus",
+        found=[str((tmp_path / "other-repo").resolve())],
+        scan_parent=tmp_path,
+    )
+    assert selected == [str(manual_repo.resolve())]

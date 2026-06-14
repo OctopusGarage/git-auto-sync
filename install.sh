@@ -37,14 +37,23 @@ command -v uv >/dev/null 2>&1 || {
 }
 UV_BIN="$(command -v uv)"
 
-# 2. resolve the release tag (follow the /releases/latest redirect; no jq needed)
+# 2. resolve the release tag from the public GitHub release page.
 if [ "$VERSION" = "latest" ]; then
-  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-    "https://github.com/$REPO/releases/latest") || {
-    err "Couldn't reach GitHub to resolve the latest release."
+  page="$(mktemp)"
+  if ! curl -fsSL -A "git-auto-sync-installer" "https://github.com/$REPO/releases/latest" -o "$page"; then
+    rm -f "$page"
+    err "Couldn't resolve the latest release."
     exit 1
-  }
-  TAG="${url##*/}"
+  fi
+  TAG="$(grep -m1 -o "/${REPO}/releases/tag/v[^\"#?[:space:]]*" "$page" | sed 's#.*/tag/##')"
+  TAG="${TAG#\"}"
+  TAG="${TAG%\"}"
+  rm -f "$page"
+  if [ -z "$TAG" ] || [ "${TAG#v}" = "$TAG" ]; then
+    err "Couldn't resolve a release tag from releases/latest page."
+    exit 1
+  fi
+  info "Latest release tag: $TAG"
 else
   TAG="$VERSION"
 fi
@@ -100,7 +109,7 @@ esac
 #    unattended needs an explicit `git-auto-sync install`).
 if [ -e "$CONFIG_PATH" ]; then
   info "Existing config found at $CONFIG_PATH; skipping guided setup."
-  info "Run 'git-auto-sync init' to reconfigure."
+  info "If you need a guided reconfigure, run: git-auto-sync init"
 else
   info "Starting guided setup..."
   if [ -t 0 ]; then
@@ -110,6 +119,18 @@ else
   else
     "$BIN_DIR/git-auto-sync" init --yes
   fi
+fi
+
+if [ ! -x "$BIN_DIR/git-auto-sync" ]; then
+  err "Smoke check failed: git-auto-sync launcher is not executable."
+  exit 1
+fi
+
+if "$BIN_DIR/git-auto-sync" --help >/dev/null 2>&1; then
+  info "Smoke check passed: launcher is executable."
+else
+  err "Smoke check failed: git-auto-sync launcher can not be executed."
+  exit 1
 fi
 
 info "Done. Installed $TAG at $INSTALL_DIR"

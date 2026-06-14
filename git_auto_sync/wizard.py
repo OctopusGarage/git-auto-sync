@@ -129,6 +129,90 @@ def _confirm(prompt: str, default: bool = True) -> bool:
     return ans in ("y", "yes")
 
 
+def _parse_repo_tokens(answer: str) -> list[str]:
+    """Split a user token string into items.
+
+    Supported separators: comma, semicolon, and newline.
+    """
+    tokens: list[str] = []
+    for chunk in answer.replace("\n", ",").replace(";", ",").split(","):
+        part = chunk.strip()
+        if part:
+            tokens.append(part)
+    return tokens
+
+
+def _resolve_repo_token(token: str, found: list[str], scan_parent: Path) -> list[str]:
+    """Resolve one token to one or more repo absolute paths.
+
+    Accepted formats:
+    - index number (0-based)
+    - index range: 1-5 or 1- 5
+    - absolute path
+    - path fragment
+    """
+    results: list[str] = []
+
+    if not token:
+        return results
+
+    lo = token.lower()
+    if "-" in lo:
+        # range selection: 1-5
+        parts = [p.strip() for p in lo.split("-", 1)]
+        if len(parts) == 2 and parts[0] and parts[1]:
+            try:
+                start = int(parts[0])
+                end = int(parts[1])
+            except ValueError:
+                start = end = -1
+            if start >= 0 and end >= 0:
+                if start > end:
+                    start, end = end, start
+                for idx in range(start, end + 1):
+                    if 0 <= idx < len(found):
+                        results.append(found[idx])
+                    else:
+                        print(f"  ⚠ index {idx} out of range — skipped")
+                return results
+
+    if lo.isdigit():
+        idx = int(lo)
+        if 0 <= idx < len(found):
+            results.append(found[idx])
+        else:
+            print(f"  ⚠ index {idx} out of range — skipped")
+        return results
+
+    candidate = Path(token).expanduser()
+    explicit_path = (
+        candidate.is_absolute()
+        or token.startswith(("./", "../", "~"))
+        or token.startswith("~")
+        or "/" in token
+        or "\\" in token
+        or (len(token) >= 3 and token[1:2] == ":" and token[2:3] in ("/", "\\"))
+    )
+
+    # explicit path input support (allow existing directories even without .git).
+    if explicit_path:
+        if not candidate.is_absolute():
+            candidate = (scan_parent / candidate).expanduser()
+        if candidate.exists() and candidate.is_dir():
+            results.append(str(candidate.resolve()))
+        else:
+            print(f"  ⚠ path not a directory: {token!r}")
+        return results
+
+    # fallback to substring match in discovered paths
+    matches = [p for p in found if token in p]
+    if matches:
+        results.extend(matches)
+    else:
+        print(f"  ⚠ no repo matching {token!r} — skipped")
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Main wizard flow
 # ---------------------------------------------------------------------------
@@ -141,183 +225,186 @@ def run_init(args) -> int:
       .yes          – bool
       .no_schedule  – bool
     """
-    yes: bool = getattr(args, "yes", False)
-    no_schedule: bool = getattr(args, "no_schedule", False)
+    try:
+        yes: bool = getattr(args, "yes", False)
+        no_schedule: bool = getattr(args, "no_schedule", False)
 
-    # ------------------------------------------------------------------ 1. Config path
-    config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
-    config_path = config_path.expanduser().resolve()
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+        # ------------------------------------------------------------------ 1. Config path
+        config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
+        config_path = config_path.expanduser().resolve()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if config_path.exists():
-        backup = Path(str(config_path) + ".bak")
-        shutil.copy2(config_path, backup)
-        print(f"• Backed up existing config → {backup}")
+        if config_path.exists():
+            backup = Path(str(config_path) + ".bak")
+            shutil.copy2(config_path, backup)
+            print(f"• Backed up existing config → {backup}")
 
-    # ------------------------------------------------------------------ 2. Repos
-    default_parent = Path.home() / "programming"
-    if not default_parent.exists():
-        default_parent = Path.cwd()
-
-    if yes:
-        scan_parent = default_parent
-    else:
-        ans = input(f"  Parent directory to scan for git repos [{default_parent}]: ").strip()
-        scan_parent = Path(ans).expanduser() if ans else default_parent
-
-    found = scan_git_repos(scan_parent)
-
-    selected: list[str] = []
-    if found:
-        print(f"  Found {len(found)} git repo(s) in {scan_parent}:")
-        for i, p in enumerate(found):
-            print(f"    [{i}] {p}")
+        # ------------------------------------------------------------------ 2. Repos
+        default_parent = Path.home() / "programming"
+        if not default_parent.exists():
+            default_parent = Path.cwd()
 
         if yes:
-            selected = list(found)
+            scan_parent = default_parent
         else:
-            ans = input(
-                "  Select repos (comma-separated indexes, or Enter for all): "
-            ).strip()
-            if not ans:
+            ans = input(f"  Parent directory to scan for git repos [{default_parent}]: ").strip()
+            scan_parent = Path(ans).expanduser() if ans else default_parent
+
+        found = scan_git_repos(scan_parent)
+
+        selected: list[str] = []
+        if found:
+            print(f"  Found {len(found)} git repo(s) in {scan_parent}:")
+            if len(found) <= 120:
+                for i, p in enumerate(found):
+                    print(f"    [{i}] {p}")
+            else:
+                print("  ⚠ Too many repos found; listing is skipped")
+                print("  You can still enter index/range or absolute path values below.")
+
+            if yes:
                 selected = list(found)
             else:
-                chosen: list[str] = []
-                for tok in ans.split(","):
-                    tok = tok.strip()
-                    try:
-                        idx = int(tok)
-                        if 0 <= idx < len(found):
-                            chosen.append(found[idx])
-                        else:
-                            print(f"  ⚠ index {idx} out of range — skipped")
-                    except ValueError:
-                        # treat as path fragment / name
-                        matches = [p for p in found if tok in p]
-                        if matches:
-                            chosen.extend(matches)
-                        else:
-                            print(f"  ⚠ no repo matching {tok!r} — skipped")
-                selected = chosen
-    else:
-        print(f"  No git repos found under {scan_parent}.")
-
-    if not yes:
-        print("  Add extra absolute paths (one per line, blank to finish):")
-        while True:
-            extra = input("    > ").strip()
-            if not extra:
-                break
-            selected.append(extra)
-
-    if not selected:
-        print("  ℹ No repos selected — you can add [[repos]] to the config later.")
-
-    # ------------------------------------------------------------------ 3. AI provider
-    has_claude = bool(shutil.which("claude"))
-    default_provider = "claude-cli" if has_claude else "rules"
-    providers = ["claude-cli", "anthropic-api", "rules"]
-
-    if yes:
-        ai_provider = default_provider
-    else:
-        print(f"  AI provider options: {', '.join(providers)}")
-        if has_claude:
-            print("  ✓ claude detected on PATH")
+                prompt = "  Select repos (indexes/ranges, absolute paths, "
+                prompt += "comma/newline separated, or Enter for all): "
+                ans = input(prompt).strip()
+                if not ans:
+                    selected = list(found)
+                else:
+                    chosen: list[str] = []
+                    token_set: set[str] = set()
+                    for tok in _parse_repo_tokens(ans):
+                        for repo in _resolve_repo_token(tok, found, scan_parent):
+                            if repo not in token_set:
+                                token_set.add(repo)
+                                chosen.append(repo)
+                    selected = chosen
         else:
-            print("  ⚠ claude not found on PATH")
-        ans = input(f"  Choose AI provider [{default_provider}]: ").strip()
-        ai_provider = ans if ans in providers else default_provider
+            print(f"  No git repos found under {scan_parent}.")
 
-    print(f"  ✓ ai_provider = {ai_provider}")
+        if not yes:
+            print("  Add extra absolute paths (one per line,")
+            print("  comma/newline separated, blank to finish):")
+            while True:
+                extra = input("    > ").strip()
+                if not extra:
+                    break
+                for tok in _parse_repo_tokens(extra):
+                    for repo in _resolve_repo_token(tok, found, scan_parent):
+                        if repo not in selected:
+                            selected.append(repo)
 
-    # ------------------------------------------------------------------ 4. notify_on
-    default_notify = "change_or_fail"
-    if yes:
-        notify_on = default_notify
-    else:
-        opts = "change_or_fail / fail_only / always"
-        ans = input(f"  notify_on ({opts}) [{default_notify}]: ").strip()
-        notify_on = ans if ans in {"change_or_fail", "fail_only", "always"} else default_notify
-    print(f"  ✓ notify_on = {notify_on}")
+        if not selected:
+            print("  ℹ No repos selected — you can add [[repos]] to the config later.")
 
-    # ------------------------------------------------------------------ 5. Log path
-    default_log = str(Path.home() / ".git-auto-sync" / "sync.log")
-    if yes:
-        log_path = default_log
-    else:
-        ans = input(f"  Log file path [{default_log}]: ").strip()
-        log_path = ans if ans else default_log
-    print(f"  ✓ log_path = {log_path}")
+        # ------------------------------------------------------------------ 3. AI provider
+        has_claude = bool(shutil.which("claude"))
+        default_provider = "claude-cli" if has_claude else "rules"
+        providers = ["claude-cli", "anthropic-api", "rules"]
 
-    # ------------------------------------------------------------------ 6. Telegram / Lark
-    telegram: dict | None = None
-    lark: dict | None = None
-
-    if not yes:
-        if _confirm("  Enable Telegram notifier?", default=False):
-            default_token = "env:TELEGRAM_BOT_TOKEN"
-            bot_token = input(f"    bot_token [{default_token}]: ").strip() or default_token
-            chat_id = input("    chat_id: ").strip()
-            telegram = {"bot_token": bot_token, "chat_id": chat_id}
-
-        if _confirm("  Enable Lark (Feishu) notifier?", default=False):
-            webhook = input("    webhook URL: ").strip()
-            lark = {"webhook": webhook}
-
-    # ------------------------------------------------------------------ 7. Write + validate
-    # load_config requires at least one [[repos]].  When nothing was selected, write a
-    # placeholder so the file is structurally valid; the user must replace it later.
-    placeholder_used = False
-    if not selected:
-        placeholder_used = True
-        repos_to_write = [str(Path.home() / "replace-me" / "your-repo")]
-    else:
-        repos_to_write = selected
-
-    toml_str = render_config_toml(
-        repos=repos_to_write,
-        ai_provider=ai_provider,
-        notify_on=notify_on,
-        log_path=log_path,
-        telegram=telegram,
-        lark=lark,
-    )
-    config_path.write_text(toml_str, encoding="utf-8")
-    print(f"\n✓ Wrote {config_path}")
-
-    try:
-        load_config(config_path)
-        if placeholder_used:
-            print("✓ Config valid (placeholder repo written — edit before running sync)")
+        if yes:
+            ai_provider = default_provider
         else:
-            print("✓ Config valid")
-    except Exception as exc:
-        print(f"✗ Config validation failed: {exc}", file=sys.stderr)
-        return 1
+            print(f"  AI provider options: {', '.join(providers)}")
+            if has_claude:
+                print("  ✓ claude detected on PATH")
+            else:
+                print("  ⚠ claude not found on PATH")
+            ans = input(f"  Choose AI provider [{default_provider}]: ").strip()
+            ai_provider = ans if ans in providers else default_provider
 
-    # ------------------------------------------------------------------ 8. Scheduler
-    if yes or no_schedule:
-        print("\n  To install the scheduler later, run:")
-        print("    git-auto-sync install --interval 30m")
-    else:
-        if _confirm("\n  Install the native scheduler now?", default=True):
-            default_interval = "30m"
-            interval = input(f"    Interval [{default_interval}]: ").strip() or default_interval
-            try:
-                from git_auto_sync.scheduler import install
-                result = install(interval)
-                print(f"  ✓ {result}")
-            except Exception as exc:
-                print(f"  ✗ Scheduler install failed: {exc}", file=sys.stderr)
+        print(f"  ✓ ai_provider = {ai_provider}")
+
+        # ------------------------------------------------------------------ 4. notify_on
+        default_notify = "change_or_fail"
+        if yes:
+            notify_on = default_notify
         else:
-            print("  To install the scheduler later, run:")
+            opts = "change_or_fail / fail_only / always"
+            ans = input(f"  notify_on ({opts}) [{default_notify}]: ").strip()
+            notify_on = ans if ans in {"change_or_fail", "fail_only", "always"} else default_notify
+        print(f"  ✓ notify_on = {notify_on}")
+
+        # ------------------------------------------------------------------ 5. Log path
+        default_log = str(Path.home() / ".git-auto-sync" / "sync.log")
+        if yes:
+            log_path = default_log
+        else:
+            ans = input(f"  Log file path [{default_log}]: ").strip()
+            log_path = ans if ans else default_log
+        print(f"  ✓ log_path = {log_path}")
+
+        # ------------------------------------------------------------------ 6. Telegram / Lark
+        telegram: dict | None = None
+        lark: dict | None = None
+
+        if not yes:
+            if _confirm("  Enable Telegram notifier?", default=False):
+                default_token = "env:TELEGRAM_BOT_TOKEN"
+                bot_token = input(f"    bot_token [{default_token}]: ").strip() or default_token
+                chat_id = input("    chat_id: ").strip()
+                telegram = {"bot_token": bot_token, "chat_id": chat_id}
+
+            if _confirm("  Enable Lark (Feishu) notifier?", default=False):
+                webhook = input("    webhook URL: ").strip()
+                lark = {"webhook": webhook}
+
+        # ------------------------------------------------------------------ 7. Write + validate
+        # load_config requires at least one [[repos]].  When nothing was selected, write a
+        # placeholder so the file is structurally valid; the user must replace it later.
+        placeholder_used = False
+        if not selected:
+            placeholder_used = True
+            repos_to_write = [str(Path.home() / "replace-me" / "your-repo")]
+        else:
+            repos_to_write = selected
+
+        toml_str = render_config_toml(
+            repos=repos_to_write,
+            ai_provider=ai_provider,
+            notify_on=notify_on,
+            log_path=log_path,
+            telegram=telegram,
+            lark=lark,
+        )
+        config_path.write_text(toml_str, encoding="utf-8")
+        print(f"\n✓ Wrote {config_path}")
+
+        try:
+            load_config(config_path)
+            if placeholder_used:
+                print("✓ Config valid (placeholder repo written — edit before running sync)")
+            else:
+                print("✓ Config valid")
+        except Exception as exc:
+            print(f"✗ Config validation failed: {exc}", file=sys.stderr)
+            return 1
+
+        # ------------------------------------------------------------------ 8. Scheduler
+        if yes or no_schedule:
+            print("\n  To install the scheduler later, run:")
             print("    git-auto-sync install --interval 30m")
+        else:
+            if _confirm("\n  Install the native scheduler now?", default=True):
+                default_interval = "30m"
+                interval = input(f"    Interval [{default_interval}]: ").strip() or default_interval
+                try:
+                    from git_auto_sync.scheduler import install
+                    result = install(interval)
+                    print(f"  ✓ {result}")
+                except Exception as exc:
+                    print(f"  ✗ Scheduler install failed: {exc}", file=sys.stderr)
+            else:
+                print("  To install the scheduler later, run:")
+                print("    git-auto-sync install --interval 30m")
 
-    # ------------------------------------------------------------------ 9. Closing checklist
-    print("\nNext steps:")
-    print(f"  • Edit {config_path} to add/adjust [[repos]]")
-    print("  • Dry-run: git-auto-sync sync --dry-run")
-    print("  • Check config: git-auto-sync config check")
-    print("\n✓ Done.")
-    return 0
+        # ------------------------------------------------------------------ 9. Closing checklist
+        print("\nNext steps:")
+        print(f"  • Edit {config_path} to add/adjust [[repos]]")
+        print("  • Dry-run: git-auto-sync sync --dry-run")
+        print("  • Check config: git-auto-sync config check")
+        print("\n✓ Done.")
+        return 0
+    except (KeyboardInterrupt, EOFError):
+        print("\n⚠ Setup canceled by user.", file=sys.stderr)
+        return 130

@@ -41,14 +41,19 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 }
 $UvBin = (Get-Command uv -ErrorAction Stop).Source
 
-# 2. resolve the release tag
+# 2. resolve the release tag from public GitHub releases
 if ($Version -eq "latest") {
     try {
-        $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-        $Tag = $Release.tag_name
+        $releaseHtml = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -MaximumRedirection 10
+        $escapedRepo = [regex]::Escape($Repo)
+        $match = [regex]::Match($releaseHtml.Content, "/$escapedRepo/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)")
+        if (-not $match.Success) {
+            Fail "Couldn't resolve the latest release tag from releases page."
+        }
+        $Tag = $match.Groups[1].Value
     }
     catch {
-        Fail "Couldn't reach GitHub to resolve the latest release."
+        Fail "Couldn't resolve the latest release tag."
     }
 }
 else {
@@ -136,6 +141,12 @@ else {
         & $Launcher init --yes
     }
 }
+
+& $Launcher --version | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Fail "Smoke check failed: git-auto-sync launcher is not executable."
+}
+Info "Smoke check passed: $(& $Launcher --version)"
 
 Info "Done. Installed $Tag at $InstallDir"
 Info "Update later with: git-auto-sync update"

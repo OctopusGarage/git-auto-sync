@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 
+from git_auto_sync import __version__
 from git_auto_sync.config import ConfigError, load_config
 from git_auto_sync.engine import run_sync, should_notify
 from git_auto_sync.notifiers import build_notifiers, format_summary
@@ -136,6 +137,11 @@ def _cmd_update(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="git-auto-sync")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"git-auto-sync {__version__}",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="interactive setup wizard")
@@ -183,7 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (KeyboardInterrupt, EOFError):
+        print("\n⚠ Interrupted by user.", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":
