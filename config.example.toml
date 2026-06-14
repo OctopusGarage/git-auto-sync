@@ -1,0 +1,31 @@
+# Example config for git-auto-sync
+# Copy to ~/.git-auto-sync/config.toml and adjust as needed.
+
+[defaults]
+ai_provider            = "claude-cli"      # claude-cli | anthropic-api | rules
+ai_staging             = true              # AI picks files to stage; set false to fall back to git add -A
+ai_gitignore_autowrite = true              # when ai_staging is enabled, append ignored files into .gitignore
+push                   = true              # pull --rebase then push after commit
+notify_on              = "change_or_fail"  # change_or_fail | fail_only | always
+
+# ---- Repositories to sync, supports multiple entries ----
+[[repos]]
+path = "~/programming/foo"
+
+[[repos]]
+path = "~/programming/bar"
+push = false                               # can override any defaults field per repository
+
+# ---- Notifier channels (only entries with enabled=true are active) ----
+[notifiers.log]
+enabled = true
+path    = "~/.git-auto-sync/sync.log"
+
+[notifiers.telegram]
+enabled   = false
+bot_token = "env:TELEGRAM_BOT_TOKEN"       # env: prefix reads from environment variable and avoids plaintext secrets
+chat_id   = "123456"
+
+[notifiers.lark]
+enabled = false
+webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/xxxx"

@@ -1,0 +1,50 @@
+from pathlib import Path
+
+from git_auto_sync import cli
+
+
+def _config_file(tmp_path, repo_path, logfile):
+    cfg = tmp_path / "config.toml"
+    repo_path = str(Path(repo_path).as_posix())
+    logfile = str(logfile.as_posix())
+    cfg.write_text(f"""
+[defaults]
+ai_provider = "rules"
+ai_staging = false
+push = true
+
+[[repos]]
+path = "{repo_path}"
+
+[notifiers.log]
+enabled = true
+path = "{logfile}"
+""")
+    return cfg
+
+
+def test_sync_commits_and_notifies(git_repo, tmp_path):
+    (Path(git_repo) / "x.py").write_text("print(1)\n")
+    logfile = tmp_path / "sync.log"
+    cfg = _config_file(tmp_path, git_repo, logfile)
+    code = cli.main(["sync", "--config", str(cfg)])
+    assert code == 0
+    assert "Committed and pushed" in logfile.read_text(encoding="utf-8")
+
+
+def test_sync_dry_run_makes_no_commit(git_repo, tmp_path):
+    (Path(git_repo) / "x.py").write_text("print(1)\n")
+    logfile = tmp_path / "sync.log"
+    cfg = _config_file(tmp_path, git_repo, logfile)
+    code = cli.main(["sync", "--config", str(cfg), "--dry-run"])
+    assert code == 0
+    from git_auto_sync import git_ops
+    assert git_ops.has_changes(git_repo) is True  # nothing committed
+
+
+def test_config_check_ok(git_repo, tmp_path, capsys):
+    logfile = tmp_path / "sync.log"
+    cfg = _config_file(tmp_path, git_repo, logfile)
+    code = cli.main(["config", "check", "--config", str(cfg)])
+    assert code == 0
+    assert "OK" in capsys.readouterr().out
