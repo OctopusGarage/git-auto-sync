@@ -40,15 +40,17 @@ def test_cron_line_format():
 
 def test_with_entry_replaces_prior_managed_line():
     from git_auto_sync.scheduler.cron import with_entry
+
     existing = "0 5 * * * /usr/bin/backup\n*/10 * * * * /old/git-auto-sync sync  # git-auto-sync\n"
     out = with_entry(existing, "/usr/local/bin/git-auto-sync", 1800)
-    assert "/usr/bin/backup" in out                 # unrelated line preserved
-    assert out.count("# git-auto-sync") == 1         # only one managed line
+    assert "/usr/bin/backup" in out  # unrelated line preserved
+    assert out.count("# git-auto-sync") == 1  # only one managed line
     assert "*/30 * * * * /usr/local/bin/git-auto-sync sync" in out
 
 
 def test_without_entry_removes_managed_line_only():
     from git_auto_sync.scheduler.cron import without_entry
+
     existing = "0 5 * * * /usr/bin/backup\n*/30 * * * * x sync  # git-auto-sync\n"
     out = without_entry(existing)
     assert "/usr/bin/backup" in out

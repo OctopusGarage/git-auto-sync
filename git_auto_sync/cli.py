@@ -17,7 +17,11 @@ def _cmd_sync(args) -> int:
     cfg = load_config(args.config)
     repos = cfg.repos
     if args.repo:
-        repos = [r for r in repos if r.path.endswith(args.repo) or args.repo in r.path]
+        repos = [
+            r
+            for r in repos
+            if r.name == args.repo or r.path.endswith(args.repo) or args.repo in r.path
+        ]
         if not repos:
             print(f"no repo matching: {args.repo}", file=sys.stderr)
             return 2
@@ -35,23 +39,29 @@ def _cmd_sync(args) -> int:
 
 
 def _cmd_status(args) -> int:
-    from git_auto_sync import git_ops
+    from git_auto_sync.path_policy import status_pathspecs
+    from git_auto_sync.repo_runtime import build_repo_runtime
+
     cfg = load_config(args.config)
     for r in cfg.repos:
-        branch = git_ops.current_branch(r.path)
-        dirty = "dirty" if git_ops.has_changes(r.path) else "clean"
+        runtime = build_repo_runtime(r)
+        pathspecs = status_pathspecs(r.path_policy)
+        branch = runtime.current_branch()
+        dirty = "dirty" if runtime.has_changes(pathspecs) else "clean"
         print(f"{r.path}  [{branch}]  {dirty}")
     return 0
 
 
 def _cmd_install(args) -> int:
     from git_auto_sync.scheduler import install
+
     print(install(args.interval))
     return 0
 
 
 def _cmd_uninstall(args) -> int:
     from git_auto_sync.scheduler import uninstall
+
     print(uninstall())
     return 0
 
@@ -68,6 +78,7 @@ def _cmd_config_check(args) -> int:
 
 def _cmd_init(args) -> int:
     from git_auto_sync.wizard import run_init
+
     return run_init(args)
 
 
@@ -94,8 +105,11 @@ def _cmd_update(args) -> int:
             print("up to date")
         return 0
 
-    if not args.force and not args.version and installed and not release.is_newer(
-        target, installed
+    if (
+        not args.force
+        and not args.version
+        and installed
+        and not release.is_newer(target, installed)
     ):
         print(f"already up to date ({installed})")
         return 0

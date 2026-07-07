@@ -60,12 +60,14 @@ exit 0
     )
 
     env = os.environ.copy()
-    env.update({
-        "HOME": str(home),
-        "PATH": f"{fakebin}:{env.get('PATH', '')}",
-        "GIT_AUTO_SYNC_VERSION": "v9.9.9",
-        "UV_LOG": str(uv_log),
-    })
+    env.update(
+        {
+            "HOME": str(home),
+            "PATH": f"{fakebin}:{env.get('PATH', '')}",
+            "GIT_AUTO_SYNC_VERSION": "v9.9.9",
+            "UV_LOG": str(uv_log),
+        }
+    )
     env.pop("GIT_AUTO_SYNC_DIR", None)
     return env, home, uv_log
 
@@ -86,7 +88,7 @@ def test_installer_preserves_existing_config_and_skips_init(tmp_path):
     env, home, uv_log = _fake_installer_env(tmp_path)
     config_path = home / ".git-auto-sync" / "config.toml"
     config_path.parent.mkdir(parents=True)
-    original_config = "# user config\n[[repos]]\npath = \"/repo\"\n"
+    original_config = '# user config\n[[repos]]\npath = "/repo"\n'
     config_path.write_text(original_config, encoding="utf-8")
 
     result = _run_install(tmp_path, env)
@@ -101,7 +103,7 @@ def test_installer_launcher_uses_resolved_uv_path(tmp_path):
     env, home, _uv_log = _fake_installer_env(tmp_path)
     config_path = home / ".git-auto-sync" / "config.toml"
     config_path.parent.mkdir(parents=True)
-    config_path.write_text("[[repos]]\npath = \"/repo\"\n", encoding="utf-8")
+    config_path.write_text('[[repos]]\npath = "/repo"\n', encoding="utf-8")
 
     result = _run_install(tmp_path, env)
 

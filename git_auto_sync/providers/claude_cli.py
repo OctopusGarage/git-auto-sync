@@ -34,7 +34,9 @@ class ClaudeCliProvider:
             raise RuntimeError("claude CLI not found on PATH")
         proc = subprocess.run(
             [self._bin, "-p", "--bare", prompt],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         if proc.returncode != 0 or not proc.stdout.strip():
             raise RuntimeError(proc.stderr.strip() or "empty claude output")

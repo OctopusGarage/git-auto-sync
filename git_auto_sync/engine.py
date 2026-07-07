@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from git_auto_sync import git_ops
 from git_auto_sync.models import RepoConfig, RepoResult, RunSummary
+from git_auto_sync.path_policy import apply_path_policy, status_pathspecs
+from git_auto_sync.repo_runtime import build_repo_runtime
 
 
 def append_gitignore(repo: str | Path, paths: list[str]) -> None:
@@ -34,57 +35,94 @@ def should_notify(notify_on: str, summary: RunSummary) -> bool:
 
 
 def sync_repo(cfg: RepoConfig, provider, dry_run: bool = False) -> RepoResult:
+    runtime = build_repo_runtime(cfg)
     repo = cfg.path
-    if not git_ops.has_changes(repo):
+    pathspecs = status_pathspecs(cfg.path_policy)
+    if not runtime.has_changes(pathspecs):
         return RepoResult(path=repo, status="skipped")
 
-    changes = git_ops.list_changes(repo)
+    changes = runtime.list_changes(pathspecs)
+    policy_result = apply_path_policy(changes, cfg.path_policy)
+    changes = policy_result.stage
     ignored: list[str] = []
+    blocked: list[str] = policy_result.blocked
 
     if cfg.ai_staging:
         decision = provider.analyze_staging(changes)
-        ignored = decision.ignore
+        ignored = [*policy_result.ignored, *decision.ignore]
         if cfg.ai_gitignore_autowrite and not dry_run:
-            append_gitignore(repo, ignored)
+            append_gitignore(runtime.work_tree, [*decision.ignore, *blocked])
         stage_changes = [c for c in changes if c.path in set(decision.stage)]
     else:
+        ignored = policy_result.ignored
         stage_changes = changes
+
+    if not stage_changes:
+        return RepoResult(path=repo, status="skipped", ignored_paths=ignored, blocked_paths=blocked)
 
     message = provider.generate_message(stage_changes, diff_text="")
 
     if dry_run:
-        return RepoResult(path=repo, status="skipped",
-                          message=message, ignored_paths=ignored)
+        return RepoResult(
+            path=repo,
+            status="skipped",
+            message=message,
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
 
-    if cfg.ai_staging:
-        git_ops.add_paths(repo, [c.path for c in stage_changes])
-    else:
-        git_ops.add_all(repo)
+    runtime.add_paths([c.path for c in stage_changes])
 
-    ok, err = git_ops.commit(repo, message)
+    ok, err = runtime.commit(message)
     if not ok:
-        return RepoResult(path=repo, status="failed", error=f"commit failed: {err}",
-                          ignored_paths=ignored)
+        return RepoResult(
+            path=repo,
+            status="failed",
+            error=f"commit failed: {err}",
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
 
     if not cfg.push:
-        return RepoResult(path=repo, status="committed", message=message,
-                          ignored_paths=ignored)
+        return RepoResult(
+            path=repo,
+            status="committed",
+            message=message,
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
 
     # A local commit already exists at this point; on rebase conflict or push
     # failure it stays local and push is retried on the next run.
-    ok, err = git_ops.pull_rebase(repo)
+    ok, err = runtime.pull_rebase()
     if not ok:
-        return RepoResult(path=repo, status="failed",
-                          error=f"pull --rebase conflict: {err}",
-                          message=message, ignored_paths=ignored)
+        return RepoResult(
+            path=repo,
+            status="failed",
+            error=f"pull --rebase conflict: {err}",
+            message=message,
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
 
-    ok, err = git_ops.push(repo)
+    ok, err = runtime.push()
     if not ok:
-        return RepoResult(path=repo, status="failed", error=f"push failed: {err}",
-                          message=message, ignored_paths=ignored)
+        return RepoResult(
+            path=repo,
+            status="failed",
+            error=f"push failed: {err}",
+            message=message,
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
 
-    return RepoResult(path=repo, status="committed_pushed", message=message,
-                      ignored_paths=ignored)
+    return RepoResult(
+        path=repo,
+        status="committed_pushed",
+        message=message,
+        ignored_paths=ignored,
+        blocked_paths=blocked,
+    )
 
 
 def run_sync(repos: list[RepoConfig], build_provider, dry_run: bool = False) -> RunSummary:

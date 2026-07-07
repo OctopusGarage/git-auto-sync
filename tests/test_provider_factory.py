@@ -31,12 +31,14 @@ def test_fallback_to_rules_on_error(monkeypatch):
 
 def test_parse_staging_json():
     from git_auto_sync.providers.claude_cli import parse_staging_json
+
     d = parse_staging_json('{"stage": ["a.py"], "ignore": [".env"]}')
     assert d.stage == ["a.py"] and d.ignore == [".env"]
 
 
 def test_parse_staging_json_without_object_raises():
     from git_auto_sync.providers.claude_cli import parse_staging_json
+
     with pytest.raises(ValueError):
         parse_staging_json("sorry, no json here")
 

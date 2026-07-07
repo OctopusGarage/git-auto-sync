@@ -30,8 +30,10 @@ def build_provider(name: str):
         return RulesProvider()
     if name == "claude-cli":
         from git_auto_sync.providers.claude_cli import ClaudeCliProvider
+
         return _FallbackProvider(ClaudeCliProvider())
     if name == "anthropic-api":
         from git_auto_sync.providers.anthropic_api import AnthropicApiProvider
+
         return _FallbackProvider(AnthropicApiProvider())
     raise ValueError(f"unknown provider: {name}")

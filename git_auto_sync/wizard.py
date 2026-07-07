@@ -1,4 +1,5 @@
 """Interactive setup wizard for git-auto-sync."""
+
 from __future__ import annotations
 
 import shutil
@@ -10,6 +11,7 @@ from git_auto_sync.config import DEFAULT_CONFIG_PATH, load_config
 # ---------------------------------------------------------------------------
 # Pure helpers
 # ---------------------------------------------------------------------------
+
 
 def scan_git_repos(parent: str | Path) -> list[str]:
     """Return absolute paths of git repos found up to depth 2 under *parent*.
@@ -109,9 +111,7 @@ def render_config_toml(
         lines.append(f'webhook = "{_toml_string(lark["webhook"])}"')
     else:
         lines.append("enabled = false")
-        lines.append(
-            'webhook = "https://open.larksuite.com/open-apis/bot/v2/hook/PLACEHOLDER"'
-        )
+        lines.append('webhook = "https://open.larksuite.com/open-apis/bot/v2/hook/PLACEHOLDER"')
     lines.append("")
 
     return "\n".join(lines)
@@ -120,6 +120,7 @@ def render_config_toml(
 # ---------------------------------------------------------------------------
 # Interactive helpers
 # ---------------------------------------------------------------------------
+
 
 def _confirm(prompt: str, default: bool = True) -> bool:
     suffix = "[Y/n]" if default else "[y/N]"
@@ -216,6 +217,7 @@ def _resolve_repo_token(token: str, found: list[str], scan_parent: Path) -> list
 # ---------------------------------------------------------------------------
 # Main wizard flow
 # ---------------------------------------------------------------------------
+
 
 def run_init(args) -> int:
     """Interactive (or --yes) setup wizard.
@@ -390,6 +392,7 @@ def run_init(args) -> int:
                 interval = input(f"    Interval [{default_interval}]: ").strip() or default_interval
                 try:
                     from git_auto_sync.scheduler import install
+
                     result = install(interval)
                     print(f"  ✓ {result}")
                 except Exception as exc:

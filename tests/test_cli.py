@@ -39,7 +39,33 @@ def test_sync_dry_run_makes_no_commit(git_repo, tmp_path):
     code = cli.main(["sync", "--config", str(cfg), "--dry-run"])
     assert code == 0
     from git_auto_sync import git_ops
+
     assert git_ops.has_changes(git_repo) is True  # nothing committed
+
+
+def test_sync_repo_filter_matches_name(git_repo, tmp_path):
+    (Path(git_repo) / "x.py").write_text("print(1)\n")
+    logfile = tmp_path / "sync.log"
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f"""
+[defaults]
+ai_provider = "rules"
+ai_staging = false
+push = false
+
+[[repos]]
+name = "named-repo"
+path = "{Path(git_repo).as_posix()}"
+
+[notifiers.log]
+enabled = true
+path = "{logfile.as_posix()}"
+""")
+
+    code = cli.main(["sync", "--config", str(cfg), "--repo", "named-repo"])
+
+    assert code == 0
+    assert "Committed (not pushed)" in logfile.read_text(encoding="utf-8")
 
 
 def test_config_check_ok(git_repo, tmp_path, capsys):

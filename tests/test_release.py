@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import io
+import os
 import shutil
 import subprocess
+import sys
 import tarfile
+from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 import git_auto_sync
 from git_auto_sync import cli, release
@@ -99,8 +104,7 @@ def test_cmd_update_uses_launcher_pinned_uv(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli.subprocess,
         "run",
-        lambda args, cwd, check: calls.append((args, cwd, check))
-        or SimpleNamespace(returncode=0),
+        lambda args, cwd, check: calls.append((args, cwd, check)) or SimpleNamespace(returncode=0),
     )
 
     rc = cli.main(["update", "--version", "v0.9.0"])
@@ -170,3 +174,29 @@ def test_download_release_extracts_tar_without_external_commands(tmp_path, monke
         encoding="utf-8"
     ) == "__version__ = '1.2.3'\n"
     assert config.read_text(encoding="utf-8") == "keep me\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="release-package.sh requires a POSIX shell")
+def test_release_package_excludes_python_cache_files():
+    repo = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHON"] = sys.executable
+    result = subprocess.run(
+        ["bash", "scripts/release-package.sh", "v9.9.9"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"release-package.sh failed with {result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+    archive = repo / "dist" / "git-auto-sync-v9.9.9-release.tar.gz"
+    with tarfile.open(archive, "r:gz") as tf:
+        names = tf.getnames()
+
+    assert not any("__pycache__" in name for name in names)
+    assert not any(name.endswith(".pyc") for name in names)

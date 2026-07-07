@@ -31,11 +31,13 @@ class AnthropicApiProvider:
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
             },
-            data=json.dumps({
-                "model": _MODEL,
-                "max_tokens": 512,
-                "messages": [{"role": "user", "content": prompt}],
-            }),
+            data=json.dumps(
+                {
+                    "model": _MODEL,
+                    "max_tokens": 512,
+                    "messages": [{"role": "user", "content": prompt}],
+                }
+            ),
             timeout=60,
         )
         resp.raise_for_status()

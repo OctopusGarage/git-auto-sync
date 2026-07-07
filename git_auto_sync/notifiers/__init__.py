@@ -24,6 +24,8 @@ def format_summary(summary: RunSummary) -> str:
             line += f"\n  Reason: {r.error}"
         if r.ignored_paths:
             line += f"\n  Ignored: {', '.join(r.ignored_paths)}"
+        if r.blocked_paths:
+            line += f"\n  Blocked: {', '.join(r.blocked_paths)}"
         lines.append(line)
     return "\n".join(lines)
 

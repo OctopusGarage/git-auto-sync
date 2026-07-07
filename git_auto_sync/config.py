@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from git_auto_sync.models import RepoConfig
+from git_auto_sync.models import PathPolicyConfig, RepoConfig
+from git_auto_sync.path_policy import validate_path_policy
 
 DEFAULT_CONFIG_PATH = Path.home() / ".git-auto-sync" / "config.toml"
 
@@ -46,6 +47,51 @@ def _resolve_env(value: Any) -> Any:
     return value
 
 
+def _resolve_path(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return str(Path(value).expanduser().resolve())
+
+
+def _load_path_policy(raw: dict[str, Any] | None) -> PathPolicyConfig:
+    if raw is None:
+        return PathPolicyConfig()
+    policy = PathPolicyConfig(
+        mode=raw.get("mode", "all"),
+        include=list(raw.get("include", [])),
+        exclude=list(raw.get("exclude", [])),
+        include_file=_resolve_path(raw.get("include_file")),
+        exclude_file=_resolve_path(raw.get("exclude_file")),
+        builtin_deny=bool(raw.get("builtin_deny", True)),
+        max_file_bytes=int(raw.get("max_file_bytes", 5 * 1024 * 1024)),
+    )
+    try:
+        validate_path_policy(policy)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+    return policy
+
+
+def _validate_repo_work_tree(repo: RepoConfig) -> None:
+    if bool(repo.git_dir) != bool(repo.work_tree):
+        raise ConfigError("git_dir and work_tree must be configured together")
+
+    effective_work_tree = Path(repo.work_tree or repo.path).expanduser().resolve()
+    if effective_work_tree == Path.home().resolve() and repo.path_policy.mode != "allowlist":
+        label = repo.name or repo.path
+        raise ConfigError(
+            f'repo "{label}" uses the user home directory as its work tree; '
+            'path_policy.mode = "allowlist" with include/include_file is required'
+        )
+
+    if repo.git_dir and repo.path_policy.mode != "allowlist":
+        label = repo.name or repo.path
+        raise ConfigError(
+            f'repo "{label}" uses git_dir/work_tree; '
+            'path_policy.mode = "allowlist" with include/include_file is required'
+        )
+
+
 def load_config(path: str | Path | None = None) -> Config:
     path = Path(path) if path else DEFAULT_CONFIG_PATH
     if not path.exists():
@@ -75,14 +121,20 @@ def load_config(path: str | Path | None = None) -> Config:
             raise ConfigError(f"invalid notify_on: {merged['notify_on']}")
         if merged["ai_provider"] not in _VALID_PROVIDERS:
             raise ConfigError(f"invalid ai_provider: {merged['ai_provider']}")
-        repos.append(RepoConfig(
+        repo = RepoConfig(
             path=str(Path(merged["path"]).expanduser().resolve()),
+            name=str(merged.get("name", "")),
+            git_dir=_resolve_path(merged.get("git_dir")),
+            work_tree=_resolve_path(merged.get("work_tree")),
             branch=merged["branch"],
             ai_provider=merged["ai_provider"],
             ai_staging=bool(merged["ai_staging"]),
             ai_gitignore_autowrite=bool(merged["ai_gitignore_autowrite"]),
             push=bool(merged["push"]),
             notify_on=merged["notify_on"],
-        ))
+            path_policy=_load_path_policy(merged.get("path_policy")),
+        )
+        _validate_repo_work_tree(repo)
+        repos.append(repo)
 
     return Config(repos=repos, notifiers=notifiers)

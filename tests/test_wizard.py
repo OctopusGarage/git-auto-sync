@@ -1,4 +1,5 @@
 """Tests for git_auto_sync.wizard pure helpers."""
+
 from __future__ import annotations
 
 import subprocess
@@ -10,6 +11,7 @@ from git_auto_sync.wizard import _resolve_repo_token, render_config_toml, scan_g
 # ---------------------------------------------------------------------------
 # scan_git_repos
 # ---------------------------------------------------------------------------
+
 
 def test_scan_git_repos_finds_git_dirs(tmp_path):
     """Two git-init'd subdirs are returned; a plain dir is excluded."""
@@ -70,6 +72,7 @@ def test_scan_git_repos_depth2(tmp_path):
 # ---------------------------------------------------------------------------
 # render_config_toml — round-trip through load_config
 # ---------------------------------------------------------------------------
+
 
 def test_render_config_toml_no_notifiers(tmp_path):
     """Render with two repos, no telegram/lark; load_config must succeed."""
@@ -168,6 +171,7 @@ def test_render_config_toml_defaults_applied(tmp_path):
 # CLI smoke test with --yes --no-schedule
 # ---------------------------------------------------------------------------
 
+
 def test_init_yes_no_schedule_writes_valid_config(tmp_path, monkeypatch):
     """git-auto-sync init --yes --no-schedule writes a config that load_config accepts.
 
@@ -179,6 +183,7 @@ def test_init_yes_no_schedule_writes_valid_config(tmp_path, monkeypatch):
 
     # Patch the default scan parent inside the wizard module
     import git_auto_sync.wizard as wizard_mod
+
     monkeypatch.setattr(
         wizard_mod,
         "scan_git_repos",
@@ -187,6 +192,7 @@ def test_init_yes_no_schedule_writes_valid_config(tmp_path, monkeypatch):
 
     cfg_path = tmp_path / "config.toml"
     from git_auto_sync.cli import main
+
     rc = main(["init", "--yes", "--no-schedule", "--config", str(cfg_path)])
     assert rc == 0
     assert cfg_path.exists()
@@ -203,6 +209,7 @@ def test_init_yes_always_backs_up_existing_config(tmp_path, monkeypatch):
     subprocess.run(["git", "init", str(repo_dir)], check=True, capture_output=True)
 
     import git_auto_sync.wizard as wizard_mod
+
     monkeypatch.setattr(
         wizard_mod,
         "scan_git_repos",
@@ -214,6 +221,7 @@ def test_init_yes_always_backs_up_existing_config(tmp_path, monkeypatch):
     cfg_path.write_text(original_content, encoding="utf-8")
 
     from git_auto_sync.cli import main
+
     rc = main(["init", "--yes", "--no-schedule", "--config", str(cfg_path)])
     assert rc == 0
 
@@ -230,23 +238,27 @@ def test_init_accepts_manual_repo_paths_when_scan_finds_none(tmp_path, monkeypat
     import builtins
 
     import git_auto_sync.wizard as wizard_mod
+
     monkeypatch.setattr(wizard_mod, "scan_git_repos", lambda parent: [])
     monkeypatch.setattr(wizard_mod.shutil, "which", lambda name: None)
 
-    answers = iter([
-        str(tmp_path),       # parent directory to scan
-        str(manual_repo),    # extra absolute repo path
-        "",                  # finish extra paths
-        "rules",             # AI provider
-        "",                  # default notify_on
-        "",                  # default log path
-        "n",                 # no Telegram
-        "n",                 # no Lark
-    ])
+    answers = iter(
+        [
+            str(tmp_path),  # parent directory to scan
+            str(manual_repo),  # extra absolute repo path
+            "",  # finish extra paths
+            "rules",  # AI provider
+            "",  # default notify_on
+            "",  # default log path
+            "n",  # no Telegram
+            "n",  # no Lark
+        ]
+    )
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
 
     cfg_path = tmp_path / "config.toml"
     from git_auto_sync.cli import main
+
     rc = main(["init", "--no-schedule", "--config", str(cfg_path)])
     assert rc == 0
 
@@ -263,6 +275,7 @@ def test_init_accepts_tilde_path_when_scan_finds_none(tmp_path, monkeypatch):
     import os
 
     import git_auto_sync.wizard as wizard_mod
+
     monkeypatch.setattr(wizard_mod, "scan_git_repos", lambda parent: [])
     monkeypatch.setattr(wizard_mod.shutil, "which", lambda name: None)
 
@@ -271,20 +284,23 @@ def test_init_accepts_tilde_path_when_scan_finds_none(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
-    answers = iter([
-        str(tmp_path),
-        "~/manual",
-        "",
-        "rules",
-        "",
-        "",
-        "n",
-        "n",
-    ])
+    answers = iter(
+        [
+            str(tmp_path),
+            "~/manual",
+            "",
+            "rules",
+            "",
+            "",
+            "n",
+            "n",
+        ]
+    )
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
 
     cfg_path = tmp_path / "config_tilde.toml"
     from git_auto_sync.cli import main
+
     rc = main(["init", "--no-schedule", "--config", str(cfg_path)])
     assert rc == 0
 

@@ -27,13 +27,13 @@ def current_branch(repo: str | Path) -> str:
 
 
 def has_changes(repo: str | Path) -> bool:
-    out = _git(repo, "status", "--porcelain").stdout
+    out = _git(repo, "status", "--porcelain", "-uall").stdout
     return bool(out.strip())
 
 
 def list_changes(repo: str | Path) -> list[FileChange]:
     """Parse `git status --porcelain` into FileChange records."""
-    out = _git(repo, "status", "--porcelain").stdout
+    out = _git(repo, "status", "--porcelain", "-uall").stdout
     changes: list[FileChange] = []
     for line in out.splitlines():
         if not line.strip():
@@ -72,8 +72,8 @@ def add_paths(repo: str | Path, paths: list[str]) -> None:
 
 def _is_gpg_sign_error(err: str) -> bool:
     low = err.lower()
-    return "gpg failed to sign" in low or "cannot run gpg" in low or (
-        "gpg" in low and "sign" in low
+    return (
+        "gpg failed to sign" in low or "cannot run gpg" in low or ("gpg" in low and "sign" in low)
     )
 
 

@@ -29,15 +29,19 @@ def install(interval: str) -> str:
     binary = _binary()
     if sys.platform == "darwin":
         from git_auto_sync.scheduler.launchd import install_launchd
+
         return install_launchd(binary, seconds)
     if sys.platform.startswith("linux"):
         if shutil.which("systemctl"):
             from git_auto_sync.scheduler.systemd import install_systemd
+
             return install_systemd(binary, seconds)
         from git_auto_sync.scheduler.cron import install_cron
+
         return install_cron(binary, seconds)
     if sys.platform == "win32":
         from git_auto_sync.scheduler.windows import install_windows
+
         return install_windows(binary, seconds)
     raise RuntimeError(f"unsupported platform for install: {sys.platform}")
 
@@ -45,14 +49,18 @@ def install(interval: str) -> str:
 def uninstall() -> str:
     if sys.platform == "darwin":
         from git_auto_sync.scheduler.launchd import uninstall_launchd
+
         return uninstall_launchd()
     if sys.platform.startswith("linux"):
         if shutil.which("systemctl"):
             from git_auto_sync.scheduler.systemd import uninstall_systemd
+
             return uninstall_systemd()
         from git_auto_sync.scheduler.cron import uninstall_cron
+
         return uninstall_cron()
     if sys.platform == "win32":
         from git_auto_sync.scheduler.windows import uninstall_windows
+
         return uninstall_windows()
     raise RuntimeError(f"unsupported platform for uninstall: {sys.platform}")
