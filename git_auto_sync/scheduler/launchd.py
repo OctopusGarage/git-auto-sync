@@ -5,6 +5,10 @@ from pathlib import Path
 
 from git_auto_sync.scheduler import LABEL
 
+DEFAULT_LAUNCHD_PATH = (
+    "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+)
+
 
 def plist_content(binary: str, interval_seconds: int) -> str:
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -18,6 +22,10 @@ def plist_content(binary: str, interval_seconds: int) -> str:
     <string>{binary}</string>
     <string>sync</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>{DEFAULT_LAUNCHD_PATH}</string>
+  </dict>
   <key>StartInterval</key><integer>{interval_seconds}</integer>
   <key>RunAtLoad</key><false/>
   <key>StandardOutPath</key><string>{Path.home()}/.git-auto-sync/launchd.out.log</string>

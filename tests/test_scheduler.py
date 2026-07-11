@@ -26,6 +26,17 @@ def test_plist_contains_interval_and_binary():
     assert "com.octopusgarage.git-auto-sync" in text
 
 
+def test_plist_sets_path_for_homebrew_tools():
+    text = plist_content(binary="/usr/local/bin/git-auto-sync", interval_seconds=1800)
+
+    assert "<key>EnvironmentVariables</key>" in text
+    assert "<key>PATH</key>" in text
+    assert "/opt/homebrew/bin" in text
+    assert "/usr/local/bin" in text
+    assert "/usr/bin" in text
+    assert "/bin" in text
+
+
 def test_systemd_timer_has_oncalendar_or_onunit():
     service, timer = timer_content(binary="/usr/local/bin/git-auto-sync", interval_seconds=1800)
     assert "ExecStart=/usr/local/bin/git-auto-sync sync" in service

@@ -67,10 +67,21 @@ def _cmd_uninstall(args) -> int:
 
 
 def _cmd_config_check(args) -> int:
+    from git_auto_sync.doctor import check_runtime_tools
+
     try:
         cfg = load_config(args.config)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
+        return 1
+    runtime_checks = check_runtime_tools(cfg, os.environ.get("PATH", ""))
+    failed_checks = [check for check in runtime_checks if not check.ok]
+    if failed_checks:
+        for check in failed_checks:
+            print(
+                f"runtime error: {check.repo}: {check.message}",
+                file=sys.stderr,
+            )
         return 1
     print(f"OK: {len(cfg.repos)} repos, notifiers: {list(cfg.notifiers)}")
     return 0

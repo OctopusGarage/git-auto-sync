@@ -4,7 +4,7 @@ Automatically commit, rebase, push, and notify across many local Git repositorie
 
 [![CI](https://github.com/OctopusGarage/git-auto-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/OctopusGarage/git-auto-sync/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776ab?logo=python&logoColor=white)](pyproject.toml)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-yellow)](pyproject.toml)
 
 ## Why
@@ -144,6 +144,12 @@ requirement is enforced even when `git_dir` is not configured.
 | Windows | Task Scheduler |
 
 No long-running daemon is required.
+
+On macOS, the generated `launchd` agent sets a stable PATH that includes
+Homebrew locations, so Git hooks and filters such as `git-lfs` and `git-crypt`
+work the same way they do in an interactive shell. `git-auto-sync config check`
+also reports missing runtime tools for configured repos before a scheduled sync
+hits them.
 
 ## Safety Boundaries
 

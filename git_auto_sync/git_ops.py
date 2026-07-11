@@ -61,13 +61,14 @@ def list_changes(repo: str | Path) -> list[FileChange]:
     return changes
 
 
-def add_all(repo: str | Path) -> None:
-    _git(repo, "add", "-A")
+def add_all(repo: str | Path) -> tuple[bool, str]:
+    return _git_ok(repo, "add", "-A")
 
 
-def add_paths(repo: str | Path, paths: list[str]) -> None:
+def add_paths(repo: str | Path, paths: list[str]) -> tuple[bool, str]:
     if paths:
-        _git(repo, "add", "--", *paths)
+        return _git_ok(repo, "add", "--", *paths)
+    return True, ""
 
 
 def _is_gpg_sign_error(err: str) -> bool:

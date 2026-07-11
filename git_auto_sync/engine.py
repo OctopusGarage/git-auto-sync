@@ -71,7 +71,33 @@ def sync_repo(cfg: RepoConfig, provider, dry_run: bool = False) -> RepoResult:
             blocked_paths=blocked,
         )
 
-    runtime.add_paths([c.path for c in stage_changes])
+    ok, err = runtime.add_paths([c.path for c in stage_changes])
+    if not ok:
+        return RepoResult(
+            path=repo,
+            status="failed",
+            error=f"add failed: {err}",
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
+
+    has_staged, err = runtime.has_staged_changes()
+    if err:
+        return RepoResult(
+            path=repo,
+            status="failed",
+            error=f"staged changes check failed: {err}",
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
+    if not has_staged:
+        return RepoResult(
+            path=repo,
+            status="failed",
+            error="add produced no staged changes",
+            ignored_paths=ignored,
+            blocked_paths=blocked,
+        )
 
     ok, err = runtime.commit(message)
     if not ok:

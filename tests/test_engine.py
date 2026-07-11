@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 
 from git_auto_sync.engine import append_gitignore, run_sync, should_notify, sync_repo
-from git_auto_sync.models import PathPolicyConfig, RepoConfig, RepoResult, RunSummary
+from git_auto_sync.models import FileChange, PathPolicyConfig, RepoConfig, RepoResult, RunSummary
 from git_auto_sync.providers.rules import RulesProvider
 
 
@@ -116,6 +116,52 @@ def test_secret_excluded_and_gitignored(git_repo):
         ["git", "ls-files"], cwd=git_repo, capture_output=True, text=True
     ).stdout
     assert ".env" not in tracked
+
+
+def test_sync_reports_add_failure_before_commit(git_repo):
+    (Path(git_repo) / "feature.py").write_text("print('x')\n")
+    lock = Path(git_repo) / ".git" / "index.lock"
+    lock.write_text("stale lock\n")
+    cfg = _repo_config(git_repo, ai_staging=False, push=False)
+
+    try:
+        result = sync_repo(cfg, RulesProvider())
+    finally:
+        lock.unlink(missing_ok=True)
+
+    assert result.status == "failed"
+    assert result.error.startswith("add failed:")
+    assert "commit failed" not in result.error
+
+
+def test_sync_reports_when_add_leaves_no_staged_changes(monkeypatch, tmp_path):
+    class RuntimeWithoutStagedChanges:
+        work_tree = tmp_path
+
+        def has_changes(self, pathspecs=None):
+            return True
+
+        def list_changes(self, pathspecs=None):
+            return [FileChange("M", "README.md", 1)]
+
+        def add_paths(self, paths):
+            return True, ""
+
+        def has_staged_changes(self):
+            return False, ""
+
+        def commit(self, message):
+            raise AssertionError("commit should not run when no paths were staged")
+
+    import git_auto_sync.engine as engine
+
+    monkeypatch.setattr(engine, "build_repo_runtime", lambda cfg: RuntimeWithoutStagedChanges())
+    cfg = _repo_config(tmp_path, ai_staging=False, push=False)
+
+    result = sync_repo(cfg, RulesProvider())
+
+    assert result.status == "failed"
+    assert result.error == "add produced no staged changes"
 
 
 def test_append_gitignore_dedupes(tmp_path):

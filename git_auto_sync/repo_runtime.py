@@ -78,9 +78,18 @@ class RepoRuntime:
             changes.append(FileChange(status=status, path=path, size_bytes=size))
         return changes
 
-    def add_paths(self, paths: list[str]) -> None:
+    def add_paths(self, paths: list[str]) -> tuple[bool, str]:
         if paths:
-            self._git("add", "--", *paths)
+            return self._git_ok("add", "--", *paths)
+        return True, ""
+
+    def has_staged_changes(self) -> tuple[bool, str]:
+        proc = self._git("diff", "--cached", "--quiet", "--exit-code")
+        if proc.returncode == 0:
+            return False, ""
+        if proc.returncode == 1:
+            return True, ""
+        return False, (proc.stderr or proc.stdout).strip()
 
     def commit(self, message: str) -> tuple[bool, str]:
         ok, err = self._git_ok("commit", "-m", message)

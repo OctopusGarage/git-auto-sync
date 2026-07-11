@@ -74,3 +74,32 @@ def test_config_check_ok(git_repo, tmp_path, capsys):
     code = cli.main(["config", "check", "--config", str(cfg)])
     assert code == 0
     assert "OK" in capsys.readouterr().out
+
+
+def test_config_check_reports_missing_runtime_tool(tmp_path, capsys, monkeypatch):
+    repo = tmp_path / "repo"
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".git" / "config").write_text(
+        "[lfs]\n\trepositoryformatversion = 0\n", encoding="utf-8"
+    )
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f"""
+[defaults]
+ai_provider = "rules"
+ai_staging = false
+push = true
+
+[[repos]]
+path = "{repo.as_posix()}"
+""")
+    monkeypatch.setenv("PATH", str(empty_bin))
+
+    code = cli.main(["config", "check", "--config", str(cfg)])
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "runtime error" in captured.err
+    assert "git-lfs" in captured.err
+    assert str(repo) in captured.err
