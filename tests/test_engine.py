@@ -134,6 +134,113 @@ def test_sync_reports_add_failure_before_commit(git_repo):
     assert "commit failed" not in result.error
 
 
+def test_sync_commits_previously_staged_deletion(git_repo):
+    obsolete = Path(git_repo) / "dashboard" / "assets" / "index-OLD.js"
+    obsolete.parent.mkdir(parents=True)
+    obsolete.write_text("old asset\n")
+    subprocess.run(
+        ["git", "add", "--", str(obsolete.relative_to(git_repo))],
+        cwd=git_repo,
+        check=True,
+    )
+    subprocess.run(["git", "commit", "-m", "test: add old asset"], cwd=git_repo, check=True)
+
+    obsolete.unlink()
+    subprocess.run(
+        ["git", "add", "--", str(obsolete.relative_to(git_repo))],
+        cwd=git_repo,
+        check=True,
+    )
+    cfg = _repo_config(git_repo, ai_staging=False, push=False)
+
+    result = sync_repo(cfg, RulesProvider())
+
+    assert result.status == "committed"
+    assert "pathspec" not in result.error
+
+
+def test_sync_pushes_with_unstaged_ignored_changes(git_repo):
+    (Path(git_repo) / ".env").write_text("base\n")
+    subprocess.run(["git", "add", "--", ".env"], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "test: add tracked"], cwd=git_repo, check=True)
+    subprocess.run(["git", "push"], cwd=git_repo, check=True)
+
+    (Path(git_repo) / "feature.py").write_text("print('x')\n")
+    (Path(git_repo) / ".env").write_text("local unstaged\n")
+    cfg = _repo_config(
+        git_repo,
+        ai_staging=True,
+        ai_gitignore_autowrite=False,
+        push=True,
+    )
+
+    result = sync_repo(cfg, RulesProvider())
+
+    assert result.status == "committed_pushed"
+    assert (Path(git_repo) / ".env").read_text() == "local unstaged\n"
+    assert subprocess.run(
+        ["git", "status", "--porcelain", "-uall", "--", ".env"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.startswith(" M .env")
+
+
+def test_sync_marks_tracked_ignored_paths_skip_worktree(git_repo):
+    (Path(git_repo) / ".env").write_text("base\n")
+    subprocess.run(["git", "add", "--", ".env"], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "test: add env"], cwd=git_repo, check=True)
+
+    (Path(git_repo) / "feature.py").write_text("print('x')\n")
+    (Path(git_repo) / ".env").write_text("local secret\n")
+    cfg = _repo_config(
+        git_repo,
+        ai_staging=True,
+        ai_gitignore_autowrite=False,
+        push=False,
+        tracked_ignored_policy="skip_worktree",
+    )
+
+    result = sync_repo(cfg, RulesProvider())
+
+    assert result.status == "committed"
+    skip_worktree = subprocess.run(
+        ["git", "ls-files", "-v", "--", ".env"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert skip_worktree.startswith("S ")
+
+
+def test_sync_marks_tracked_ignored_paths_skip_worktree_without_stage_changes(git_repo):
+    (Path(git_repo) / ".env").write_text("base\n")
+    subprocess.run(["git", "add", "--", ".env"], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "test: add env"], cwd=git_repo, check=True)
+    cfg = _repo_config(
+        git_repo,
+        ai_staging=True,
+        ai_gitignore_autowrite=False,
+        push=False,
+        tracked_ignored_policy="skip_worktree",
+    )
+
+    (Path(git_repo) / ".env").write_text("local secret\n")
+    result = sync_repo(cfg, RulesProvider())
+
+    assert result.status == "skipped"
+    skip_worktree = subprocess.run(
+        ["git", "ls-files", "-v", "--", ".env"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert skip_worktree.startswith("S ")
+
+
 def test_sync_reports_when_add_leaves_no_staged_changes(monkeypatch, tmp_path):
     class RuntimeWithoutStagedChanges:
         work_tree = tmp_path

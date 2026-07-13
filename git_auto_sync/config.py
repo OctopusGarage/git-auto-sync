@@ -18,9 +18,11 @@ _DEFAULT_FIELDS = {
     "ai_gitignore_autowrite": True,
     "push": True,
     "notify_on": "change_or_fail",
+    "tracked_ignored_policy": "leave_dirty",
 }
 _VALID_NOTIFY_ON = {"change_or_fail", "fail_only", "always"}
 _VALID_PROVIDERS = {"claude-cli", "anthropic-api", "rules"}
+_VALID_TRACKED_IGNORED_POLICIES = {"leave_dirty", "skip_worktree"}
 
 
 class ConfigError(Exception):
@@ -121,6 +123,8 @@ def load_config(path: str | Path | None = None) -> Config:
             raise ConfigError(f"invalid notify_on: {merged['notify_on']}")
         if merged["ai_provider"] not in _VALID_PROVIDERS:
             raise ConfigError(f"invalid ai_provider: {merged['ai_provider']}")
+        if merged["tracked_ignored_policy"] not in _VALID_TRACKED_IGNORED_POLICIES:
+            raise ConfigError(f"invalid tracked_ignored_policy: {merged['tracked_ignored_policy']}")
         repo = RepoConfig(
             path=str(Path(merged["path"]).expanduser().resolve()),
             name=str(merged.get("name", "")),
@@ -132,6 +136,7 @@ def load_config(path: str | Path | None = None) -> Config:
             ai_gitignore_autowrite=bool(merged["ai_gitignore_autowrite"]),
             push=bool(merged["push"]),
             notify_on=merged["notify_on"],
+            tracked_ignored_policy=merged["tracked_ignored_policy"],
             path_policy=_load_path_policy(merged.get("path_policy")),
         )
         _validate_repo_work_tree(repo)

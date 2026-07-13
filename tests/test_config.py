@@ -147,6 +147,43 @@ ai_provider = "gpt"
         )
 
 
+def test_tracked_ignored_policy_defaults_and_overrides(tmp_path):
+    cfg = load_config(
+        _write(
+            tmp_path,
+            """
+[defaults]
+tracked_ignored_policy = "skip_worktree"
+
+[[repos]]
+path = "/one"
+
+[[repos]]
+path = "/two"
+tracked_ignored_policy = "leave_dirty"
+""",
+        )
+    )
+
+    one, two = cfg.repos
+    assert one.tracked_ignored_policy == "skip_worktree"
+    assert two.tracked_ignored_policy == "leave_dirty"
+
+
+def test_invalid_tracked_ignored_policy_raises(tmp_path):
+    with pytest.raises(ConfigError, match="invalid tracked_ignored_policy"):
+        load_config(
+            _write(
+                tmp_path,
+                """
+[[repos]]
+path = "/x"
+tracked_ignored_policy = "delete"
+""",
+            )
+        )
+
+
 def test_home_work_tree_requires_allowlist_policy(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()

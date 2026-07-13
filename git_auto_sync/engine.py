@@ -57,6 +57,18 @@ def sync_repo(cfg: RepoConfig, provider, dry_run: bool = False) -> RepoResult:
         ignored = policy_result.ignored
         stage_changes = changes
 
+    if ignored and cfg.tracked_ignored_policy == "skip_worktree" and not dry_run:
+        tracked_ignored = runtime.tracked_paths(ignored)
+        ok, err = runtime.skip_worktree_paths(tracked_ignored)
+        if not ok:
+            return RepoResult(
+                path=repo,
+                status="failed",
+                error=f"skip-worktree failed: {err}",
+                ignored_paths=ignored,
+                blocked_paths=blocked,
+            )
+
     if not stage_changes:
         return RepoResult(path=repo, status="skipped", ignored_paths=ignored, blocked_paths=blocked)
 

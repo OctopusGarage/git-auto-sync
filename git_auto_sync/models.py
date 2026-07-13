@@ -35,6 +35,7 @@ class RepoConfig:
     ai_gitignore_autowrite: bool = True
     push: bool = True
     notify_on: str = "change_or_fail"
+    tracked_ignored_policy: str = "leave_dirty"
     path_policy: PathPolicyConfig = field(default_factory=PathPolicyConfig)
 
 

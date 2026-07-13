@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 from git_auto_sync import cli
@@ -74,6 +75,25 @@ def test_config_check_ok(git_repo, tmp_path, capsys):
     code = cli.main(["config", "check", "--config", str(cfg)])
     assert code == 0
     assert "OK" in capsys.readouterr().out
+
+
+def test_status_shortens_home_paths(tmp_path, monkeypatch, capsys):
+    home = tmp_path / "home"
+    repo = home / "repo"
+    home.mkdir()
+    repo.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    subprocess.run(["git", "init", "-b", "main", "."], cwd=repo, check=True, capture_output=True)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f"""
+[[repos]]
+path = "{repo.as_posix()}"
+""")
+
+    code = cli.main(["status", "--config", str(cfg)])
+
+    assert code == 0
+    assert "~/repo  [HEAD]  clean" in capsys.readouterr().out
 
 
 def test_config_check_reports_missing_runtime_tool(tmp_path, capsys, monkeypatch):

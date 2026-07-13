@@ -7,6 +7,7 @@ ai_staging             = true              # AI picks from path-policy-approved 
 ai_gitignore_autowrite = true              # when ai_staging is enabled, append ignored files into .gitignore
 push                   = true              # pull --rebase then push after commit
 notify_on              = "change_or_fail"  # change_or_fail | fail_only | always
+tracked_ignored_policy = "leave_dirty"     # leave_dirty | skip_worktree for ignored tracked files
 
 # ---- Repositories to sync, supports multiple entries ----
 [[repos]]

@@ -24,6 +24,24 @@ def test_format_summary_lists_blocked_paths():
     assert "Blocked: .npmrc, cert.pem" in text
 
 
+def test_format_summary_shortens_home_paths(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    s = RunSummary(
+        results=[
+            RepoResult(path=str(home), status="skipped"),
+            RepoResult(path=str(home / ".alcove"), status="failed", error="push rejected"),
+        ]
+    )
+
+    text = format_summary(s)
+
+    assert "No changes  ~" in text
+    assert "Failed  ~/.alcove" in text
+    assert str(home) not in text
+
+
 def test_log_notifier_writes_file(tmp_path):
     logfile = tmp_path / "sync.log"
     notifiers = build_notifiers({"log": {"enabled": True, "path": str(logfile)}})

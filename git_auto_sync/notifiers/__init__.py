@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from git_auto_sync.display import display_path
 from git_auto_sync.models import RunSummary
 from git_auto_sync.notifiers.lark import LarkNotifier
 from git_auto_sync.notifiers.log import LogNotifier
@@ -17,7 +18,7 @@ def format_summary(summary: RunSummary) -> str:
     lines = ["git-auto-sync sync result:"]
     for r in summary.results:
         label = _STATUS_LABEL.get(r.status, r.status)
-        line = f"{label}  {r.path}"
+        line = f"{label}  {display_path(r.path)}"
         if r.message:
             line += f"\n  {r.message.splitlines()[0]}"
         if r.error:

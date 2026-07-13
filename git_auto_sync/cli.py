@@ -8,6 +8,7 @@ import sys
 
 from git_auto_sync import __version__
 from git_auto_sync.config import ConfigError, load_config
+from git_auto_sync.display import display_path
 from git_auto_sync.engine import run_sync, should_notify
 from git_auto_sync.notifiers import build_notifiers, format_summary
 from git_auto_sync.providers import build_provider
@@ -48,7 +49,7 @@ def _cmd_status(args) -> int:
         pathspecs = status_pathspecs(r.path_policy)
         branch = runtime.current_branch()
         dirty = "dirty" if runtime.has_changes(pathspecs) else "clean"
-        print(f"{r.path}  [{branch}]  {dirty}")
+        print(f"{display_path(r.path)}  [{branch}]  {dirty}")
     return 0
 
 
@@ -79,7 +80,7 @@ def _cmd_config_check(args) -> int:
     if failed_checks:
         for check in failed_checks:
             print(
-                f"runtime error: {check.repo}: {check.message}",
+                f"runtime error: {display_path(check.repo)}: {check.message}",
                 file=sys.stderr,
             )
         return 1

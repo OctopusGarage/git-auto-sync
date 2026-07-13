@@ -89,7 +89,7 @@ def commit(repo: str | Path, message: str) -> tuple[bool, str]:
 
 
 def pull_rebase(repo: str | Path) -> tuple[bool, str]:
-    ok, err = _git_ok(repo, "pull", "--rebase")
+    ok, err = _git_ok(repo, "pull", "--rebase", "--autostash")
     if not ok:
         # abort whichever operation pull started so the tree is never left half-done
         _git(repo, "rebase", "--abort")

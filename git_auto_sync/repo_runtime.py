@@ -57,10 +57,7 @@ class RepoRuntime:
             if not line.strip():
                 continue
             xy = line[:2]
-            path = line[3:].strip()
-            if "->" in path:
-                path = path.split("->")[-1].strip()
-            path = path.strip('"')
+            path = _status_path(line)
             if xy == "??":
                 status = "A"
             elif "D" in xy:
@@ -80,8 +77,37 @@ class RepoRuntime:
 
     def add_paths(self, paths: list[str]) -> tuple[bool, str]:
         if paths:
-            return self._git_ok("add", "--", *paths)
+            paths_to_add = self._paths_requiring_add(paths)
+            if paths_to_add:
+                return self._git_ok("add", "--", *paths_to_add)
         return True, ""
+
+    def tracked_paths(self, paths: list[str]) -> list[str]:
+        if not paths:
+            return []
+        proc = self._git("ls-files", "--", *paths)
+        if proc.returncode != 0:
+            return []
+        return [line for line in proc.stdout.splitlines() if line.strip()]
+
+    def skip_worktree_paths(self, paths: list[str]) -> tuple[bool, str]:
+        if not paths:
+            return True, ""
+        return self._git_ok("update-index", "--skip-worktree", "--", *paths)
+
+    def _paths_requiring_add(self, paths: list[str]) -> list[str]:
+        proc = self._git("status", "--porcelain", "-uall", "--", *paths)
+        if proc.returncode != 0:
+            return paths
+        paths_to_add: list[str] = []
+        for line in proc.stdout.splitlines():
+            if not line.strip():
+                continue
+            xy = line[:2]
+            path = _status_path(line)
+            if xy == "??" or xy[1] != " ":
+                paths_to_add.append(path)
+        return paths_to_add
 
     def has_staged_changes(self) -> tuple[bool, str]:
         proc = self._git("diff", "--cached", "--quiet", "--exit-code")
@@ -98,7 +124,7 @@ class RepoRuntime:
         return self._git_ok("commit", "--no-gpg-sign", "-m", message)
 
     def pull_rebase(self) -> tuple[bool, str]:
-        ok, err = self._git_ok("pull", "--rebase")
+        ok, err = self._git_ok("pull", "--rebase", "--autostash")
         if not ok:
             self._git("rebase", "--abort")
             self._git("merge", "--abort")
@@ -113,6 +139,13 @@ def _is_gpg_sign_error(err: str) -> bool:
     return (
         "gpg failed to sign" in low or "cannot run gpg" in low or ("gpg" in low and "sign" in low)
     )
+
+
+def _status_path(line: str) -> str:
+    path = line[3:].strip()
+    if "->" in path:
+        path = path.split("->")[-1].strip()
+    return path.strip('"')
 
 
 def build_repo_runtime(cfg: RepoConfig) -> RepoRuntime:
