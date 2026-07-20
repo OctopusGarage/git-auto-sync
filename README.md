@@ -4,7 +4,7 @@ Automatically commit, rebase, push, and notify across many local Git repositorie
 
 [![CI](https://github.com/OctopusGarage/git-auto-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/OctopusGarage/git-auto-sync/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776ab?logo=python&logoColor=white)](pyproject.toml)
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-yellow)](pyproject.toml)
 
 ## Why
