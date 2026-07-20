@@ -39,6 +39,14 @@ def sync_repo(cfg: RepoConfig, provider, dry_run: bool = False) -> RepoResult:
     repo = cfg.path
     pathspecs = status_pathspecs(cfg.path_policy)
     if not runtime.has_changes(pathspecs):
+        if cfg.push and not dry_run:
+            ok, err = runtime.pull_rebase()
+            if not ok:
+                return RepoResult(
+                    path=repo,
+                    status="failed",
+                    error=f"pull --rebase conflict: {err}",
+                )
         return RepoResult(path=repo, status="skipped")
 
     changes = runtime.list_changes(pathspecs)

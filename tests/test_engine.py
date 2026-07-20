@@ -16,6 +16,33 @@ def test_skipped_when_no_changes(git_repo):
     assert result.status == "skipped"
 
 
+def test_clean_repo_pulls_remote_changes_when_push_enabled(git_repo, tmp_path):
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", str(Path(git_repo).parent / "remote.git"), str(clone)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "config", "user.email", "t@t.io"], cwd=clone, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=clone, check=True)
+    (clone / "README.md").write_text("remote update\n")
+    subprocess.run(
+        ["git", "commit", "-am", "docs: remote update"],
+        cwd=clone,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "push"], cwd=clone, check=True, capture_output=True, text=True)
+
+    cfg = _repo_config(git_repo, push=True)
+    result = sync_repo(cfg, RulesProvider())
+
+    assert result.status == "skipped"
+    assert (Path(git_repo) / "README.md").read_text() == "remote update\n"
+
+
 def test_commit_and_push(git_repo):
     (Path(git_repo) / "feature.py").write_text("print('x')\n")
     cfg = _repo_config(git_repo, ai_staging=False)  # add -A path
