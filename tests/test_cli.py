@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 
 from git_auto_sync import cli
+from git_auto_sync.display import display_path
 
 
 def _config_file(tmp_path, repo_path, logfile):
@@ -122,4 +123,4 @@ path = "{repo.as_posix()}"
     assert code == 1
     assert "runtime error" in captured.err
     assert "git-lfs" in captured.err
-    assert str(repo) in captured.err
+    assert display_path(str(repo)) in captured.err
