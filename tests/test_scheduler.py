@@ -19,6 +19,38 @@ def test_parse_interval():
         parse_interval_seconds("0m")  # non-positive
 
 
+def test_binary_prefers_stable_user_launcher(monkeypatch, tmp_path):
+    launcher = tmp_path / ".local" / "bin" / "git-auto-sync"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+    launcher.chmod(0o755)
+
+    monkeypatch.setattr(scheduler.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        scheduler.shutil,
+        "which",
+        lambda name: "/tmp/project/.venv/bin/git-auto-sync",
+    )
+
+    assert scheduler._binary() == str(launcher)
+
+
+def test_binary_ignores_non_executable_user_launcher(monkeypatch, tmp_path):
+    launcher = tmp_path / ".local" / "bin" / "git-auto-sync"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+    launcher.chmod(0o644)
+
+    monkeypatch.setattr(scheduler.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        scheduler.shutil,
+        "which",
+        lambda name: "/tmp/project/.venv/bin/git-auto-sync",
+    )
+
+    assert scheduler._binary() == "/tmp/project/.venv/bin/git-auto-sync"
+
+
 def test_plist_contains_interval_and_binary():
     text = plist_content(binary="/usr/local/bin/git-auto-sync", interval_seconds=1800)
     assert "git-auto-sync" in text
@@ -35,6 +67,53 @@ def test_plist_sets_path_for_homebrew_tools():
     assert "/usr/local/bin" in text
     assert "/usr/bin" in text
     assert "/bin" in text
+
+
+def test_launchd_install_bootstraps_user_domain(monkeypatch, tmp_path):
+    import git_auto_sync.scheduler.launchd as launchd
+
+    calls = []
+
+    monkeypatch.setattr(launchd.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(launchd.os, "getuid", lambda: 501)
+    monkeypatch.setattr(
+        launchd.subprocess,
+        "run",
+        lambda args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    result = launchd.install_launchd("/usr/local/bin/git-auto-sync", 1800)
+    plist = tmp_path / "Library" / "LaunchAgents" / "com.octopusgarage.git-auto-sync.plist"
+
+    assert result == f"launchd agent installed at {plist} (every 1800s)"
+    assert calls == [
+        (
+            [
+                "launchctl",
+                "bootout",
+                "gui/501",
+                str(plist),
+            ],
+            {"capture_output": True, "text": True},
+        ),
+        (
+            [
+                "launchctl",
+                "bootstrap",
+                "gui/501",
+                str(plist),
+            ],
+            {"capture_output": True, "text": True, "check": True},
+        ),
+        (
+            [
+                "launchctl",
+                "enable",
+                "gui/501/com.octopusgarage.git-auto-sync",
+            ],
+            {"capture_output": True, "text": True, "check": True},
+        ),
+    ]
 
 
 def test_systemd_timer_has_oncalendar_or_onunit():

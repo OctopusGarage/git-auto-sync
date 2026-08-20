@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -44,8 +45,20 @@ def install_launchd(binary: str, interval_seconds: int) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     (Path.home() / ".git-auto-sync").mkdir(parents=True, exist_ok=True)
     path.write_text(plist_content(binary, interval_seconds))
-    subprocess.run(["launchctl", "unload", str(path)], capture_output=True, text=True)
-    subprocess.run(["launchctl", "load", str(path)], capture_output=True, text=True, check=True)
+    domain = f"gui/{os.getuid()}"
+    subprocess.run(["launchctl", "bootout", domain, str(path)], capture_output=True, text=True)
+    subprocess.run(
+        ["launchctl", "bootstrap", domain, str(path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    subprocess.run(
+        ["launchctl", "enable", f"{domain}/{LABEL}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     return f"launchd agent installed at {path} (every {interval_seconds}s)"
 
 

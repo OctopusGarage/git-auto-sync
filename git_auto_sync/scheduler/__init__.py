@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sys
+from pathlib import Path
 
 _INTERVAL_RE = re.compile(r"^(\d+)([smh])$")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
@@ -20,6 +22,9 @@ def parse_interval_seconds(interval: str) -> int:
 
 
 def _binary() -> str:
+    user_launcher = Path.home() / ".local" / "bin" / "git-auto-sync"
+    if user_launcher.is_file() and os.access(user_launcher, os.X_OK):
+        return str(user_launcher)
     return shutil.which("git-auto-sync") or "git-auto-sync"
 
 
